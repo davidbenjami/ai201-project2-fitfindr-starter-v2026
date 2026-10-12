@@ -47,6 +47,59 @@ SCENARIOS = [
     # For a fit-card criterion, you probably want the SAME query listed more
     # than once, or several different items, depending on what your criterion
     # actually says.
+
+    # ── CLAUDE'S WORK ─────────────────────────────────────────────────────────
+    {
+        # Criterion 3 — state. selected_item is search_results[0], and the
+        # outfit and the card both name it.
+        "name": "selected item carries through",
+        "query": "black jeans under $40",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        # Criterion 4 — fit card. The SAME item five times: each card has the
+        # exact price and platform, at most 4 sentences, and no two share a
+        # first sentence.
+        "name": "fit card for the same item",
+        "query": "denim jacket under $50",
+        "wardrobe": "example",
+        "criterion": 4,
+    },
+    # Criterion 5 — filters. Five different queries, one for each size format
+    # in the data (letter, waist, shoe) plus price. Try N in the README's
+    # criterion-5 row is query N here; search has no model in it, so all five
+    # tries of one query come back the same.
+    {
+        "name": "filters: letter size + price",
+        "query": "graphic tee size M under $30",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
+    {
+        "name": "filters: waist size + price",
+        "query": "jeans size W30 under $40",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
+    {
+        "name": "filters: shoe size",
+        "query": "boots size 8.5",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
+    {
+        "name": "filters: letter size S",
+        "query": "blazer size S",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
+    {
+        "name": "filters: letter size L + price",
+        "query": "vintage tee size L under $25",
+        "wardrobe": "example",
+        "criterion": 5,
+    },
 ]
 
 WARDROBES = ("example", "empty")
