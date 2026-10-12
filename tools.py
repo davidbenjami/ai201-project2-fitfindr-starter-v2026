@@ -61,8 +61,8 @@ def _size_matches(wanted: str, listing_size: str) -> bool:
     The rule, by the shape of what was asked for:
       • A letter size ("M") matches when it is one of the listing's letter
         sizes, split on "/" and spaces — so "M" matches "S/M" and "M/L" but
-        "S" does not match "XL" or "US 9". "One Size" listings match any
-        letter size.
+        "S" does not match "XL" or "US 9". "One Size" listings do not match
+        a letter size (changed in unit 4 — see below); they match "One Size".
       • A number ("8", "8.5", "US 8") matches a shoe size exactly, or a waist
         size ("W30" in "W30 L30").
       • A waist ("W30") matches only the waist part of a listing's size.
@@ -70,9 +70,18 @@ def _size_matches(wanted: str, listing_size: str) -> bool:
     wanted = wanted.strip().upper()
     have = listing_size.upper()
 
+    # Unit 4 fix — the before-run missed criterion 5: "vintage tee size L"
+    # returned a One Size belt and bucket hat, because One Size matched any
+    # letter size. Original lines, kept for reference:
+    # if wanted in _LETTER_SIZES:
+    #     if "ONE SIZE" in have:
+    #         return True
+    #     return wanted in re.findall(r"[A-Z]+", have)
+
+    # A letter size now has to be a whole token of the listing's size. "One
+    # Size" listings only come back when no size is given, or when the user
+    # asks for "One Size" itself (the exact-match fallback at the bottom).
     if wanted in _LETTER_SIZES:
-        if "ONE SIZE" in have:
-            return True
         return wanted in re.findall(r"[A-Z]+", have)
 
     waist = re.fullmatch(r"W\s*(\d+)", wanted)
@@ -85,7 +94,9 @@ def _size_matches(wanted: str, listing_size: str) -> bool:
         return n in re.findall(r"US\s*(\d+(?:\.\d+)?)", have) or n in re.findall(r"W(\d+)", have)
 
     # Anything else ("One Size"): fall back to an exact, case-insensitive match.
-    return wanted == have.strip()
+    # return wanted == have.strip()
+    # "One Size" should also match "One Size (adjustable)" and similar.
+    return wanted == have.strip() or (wanted == "ONE SIZE" and "ONE SIZE" in have)
 
 
 def _score(listing: dict, query_words: set[str]) -> int:
@@ -335,3 +346,15 @@ def _describe_item(item: dict) -> str:
     if item.get("brand"):
         lines.insert(1, f"Brand: {item['brand']}")
     return "\n".join(lines)
+
+
+
+
+
+
+#Unit 4
+#last class we defined the search tool listing
+#parameter
+
+
+
