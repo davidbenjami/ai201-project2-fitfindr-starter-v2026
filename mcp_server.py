@@ -69,7 +69,9 @@ mcp = FastMCP("fitfindr", log_level="WARNING")
 
 # ── TODO: uncomment and fill this in ──────────────────────────────────────────
 #
-# @mcp.tool()
+# ── MY WORK (commented out) ───────────────────────────────────────────────────
+#
+# @mcp.tool() #decorator FastMCP registers the function below as a tool. The name is the function
 # def search_listings(
 #     description: str,
 #     size: str | None = None,
@@ -82,7 +84,46 @@ mcp = FastMCP("fitfindr", log_level="WARNING")
 #         what does it give back when it finds nothing? Written for a reader
 #         who cannot see the code.
 #     """
+#     return{}
 #     return _search_listings_impl(description, size, max_price)
+#
+# ── CLAUDE'S WORK (live code) ─────────────────────────────────────────────────
+
+@mcp.tool()
+def search_listings(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
+    """
+    Search a fixed set of 40 secondhand clothing listings (from depop, poshmark
+    and thredUp) by keywords, with an optional size and an optional price ceiling.
+
+    Inputs:
+      description (string, required): keywords for the item, e.g. "vintage
+        graphic tee" or "black leather jacket". Words are matched against each
+        listing's title, style tags, category, colors and description.
+      size (string, optional): one size to filter by. A letter size ("XS"-"XXL")
+        matches listings that include it, so "M" matches "S/M" but "S" never
+        matches "XL"; "One Size" listings come back only for size "One Size".
+        A number ("8.5" or "US 8.5") matches a shoe size exactly; "W30"
+        matches a 30" waist.
+        Omit it or pass null to skip size filtering.
+      max_price (number, optional): the most the user will pay, in US dollars,
+        inclusive (30 means $30.00 or less). Omit it or pass null for no limit.
+
+    Returns: a list of at most 10 listing objects, best keyword match first
+    (cheaper first on a tie). Each has id, title, description, category,
+    style_tags (list of strings), size, condition, price (number, USD),
+    colors (list of strings), brand (string, or null when unknown, which is
+    common) and platform.
+
+    When nothing matches, or the description has no usable keywords, it returns
+    an empty list [], not an error. Treat [] as "no results"; loosening
+    max_price or size, or rewording the description, may find something.
+    """
+    return _search_listings_impl(description, size, max_price)
+
 #
 # ──────────────────────────────────────────────────────────────────────────────
 #
