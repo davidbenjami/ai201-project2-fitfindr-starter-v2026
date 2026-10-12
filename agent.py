@@ -19,6 +19,7 @@ import config
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card
 from generate import ModelUnavailable
+from mcp_client import call_tool, MCPError
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -155,6 +156,31 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     # session["error"] = "The planning loop isn't built yet — see the TODO in agent.py."
     # return session
 
+    # ── UNIT 4 INSTRUCTIONS (commented out) ──────────────────────────────────
+    #
+    # IN UNIT 4 you come back and add two things:
+    #
+    #   • Trace calls. One per step. `trace.step("search_listings", inputs=...,
+    #     returned=...)` — see trace.py. Your README needs the output.
+    #
+    #   • A handler for ModelUnavailable, so a bad key produces a message rather
+    #     than a stack trace. The import is already at the top of this file.
+    #
+    # And from mcp_server.py (Milestone 1) — swap the direct call:
+    #
+    #     results = search_listings(description, size, max_price)
+    #
+    # for the MCP one:
+    #
+    #     from mcp_client import call_tool
+    #     results = call_tool("search_listings", {
+    #         "description": description,
+    #         "size": size,
+    #         "max_price": max_price,
+    #     })
+    #
+    # **What comes back should not change.**
+
     # ── CLAUDE'S WORK (live code) ────────────────────────────────────────────
 
     # Step 1: start the session.
@@ -162,6 +188,7 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
     # Step 3: parse with regex (see parse_query below).
     session["parsed"] = parse_query(query)
+    trace.step("parse_query", inputs=query, returned=_args_text(session["parsed"]))
 
     # Each pass round the loop looks at what the session holds so far and picks
     # the next step from it. "done" ends the loop on either path.
@@ -173,37 +200,94 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         trace.check_iterations(count)
 
         if next_step == "search":
-            # Step 4: search with what was parsed.
+            # Step 4: search with what was parsed — over MCP (unit 4, Milestone 1).
             parsed = session["parsed"]
-            session["search_results"] = search_listings(
-                parsed["description"], size=parsed["size"], max_price=parsed["max_price"]
-            )
+            arguments = {
+                "description": parsed["description"],
+                "size": parsed["size"],
+                "max_price": parsed["max_price"],
+            }
+            try:
+                session["search_results"] = call_tool("search_listings", arguments)
+            except MCPError as exc:
+                session["error"] = (
+                    "Search is unavailable right now — the listings server couldn't "
+                    "be reached. Try again in a moment."
+                )
+                trace.step("search_listings (via MCP)", inputs=_args_text(arguments),
+                           returned=str(exc), note="MCP call failed, stopping")
+                next_step = "done"
+                continue
 
             # THE BRANCH: nothing found → say what to change and stop, before
             # suggest_outfit. Otherwise take the first result (step 5).
             if not session["search_results"]:
                 session["error"] = _no_results_message(parsed)
+                trace.step("search_listings (via MCP)", inputs=_args_text(arguments),
+                           returned=session["search_results"],
+                           note="branch: empty, stopping before suggest_outfit")
                 next_step = "done"
             else:
                 session["selected_item"] = session["search_results"][0]
+                trace.step("search_listings (via MCP)", inputs=_args_text(arguments),
+                           returned=session["search_results"],
+                           note=f"branch: results, selected id {session['selected_item']['id']}")
                 next_step = "suggest"
 
         elif next_step == "suggest":
             # Step 6: outfit from the item the session holds, not a local copy.
-            session["outfit_suggestion"] = suggest_outfit(
-                session["selected_item"], session["wardrobe"]
-            )
+            # ModelUnavailable (bad key, no network) ends the run with a message.
+            n_items = len((session["wardrobe"] or {}).get("items") or [])
+            try:
+                session["outfit_suggestion"] = suggest_outfit(
+                    session["selected_item"], session["wardrobe"]
+                )
+            except ModelUnavailable as exc:
+                session["error"] = _model_unavailable_message(exc)
+                trace.step("suggest_outfit", inputs=session["selected_item"],
+                           returned="ModelUnavailable", note="model unreachable, stopping")
+                next_step = "done"
+                continue
+            trace.step("suggest_outfit", inputs=session["selected_item"],
+                       returned=session["outfit_suggestion"],
+                       note=f"wardrobe has {n_items} items"
+                       + (" — general styling advice" if not n_items else ""))
             next_step = "card"
 
         elif next_step == "card":
             # Step 7: fit card from the session's outfit and item.
-            session["fit_card"] = create_fit_card(
-                session["outfit_suggestion"], session["selected_item"]
-            )
+            try:
+                session["fit_card"] = create_fit_card(
+                    session["outfit_suggestion"], session["selected_item"]
+                )
+            except ModelUnavailable as exc:
+                session["error"] = _model_unavailable_message(exc)
+                trace.step("create_fit_card", inputs=session["selected_item"],
+                           returned="ModelUnavailable", note="model unreachable, stopping")
+                next_step = "done"
+                continue
+            trace.step("create_fit_card", inputs=session["selected_item"],
+                       returned=session["fit_card"])
             next_step = "done"
 
     # Step 8.
     return session
+
+
+def _args_text(args: dict) -> str:
+    """Tool arguments as one readable trace line: description='tee', size=None, ..."""
+    return ", ".join(f"{k}={v!r}" for k, v in args.items())
+
+
+def _model_unavailable_message(exc: Exception) -> str:
+    """What the user sees when the model can't be reached — no stack trace."""
+    first_line = str(exc).strip().splitlines()[0] if str(exc).strip() else ""
+    return (
+        "Found a match, but the styling model couldn't be reached, so there's no "
+        "outfit or fit card this time. Check GEMINI_API_KEY in .env and your "
+        "connection, then try again."
+        + (f" (Details: {first_line})" if first_line else "")
+    )
 
 
 # ── query parsing ─────────────────────────────────────────────────────────────
